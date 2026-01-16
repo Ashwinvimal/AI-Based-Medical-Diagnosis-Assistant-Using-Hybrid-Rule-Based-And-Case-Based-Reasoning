@@ -1,0 +1,215 @@
+import csv, random
+from google.colab import files  # <-- for download
+
+# ----------------- CONFIGURATION -----------------
+NUM_RULES = 1000
+NUM_CASES = 5000
+
+SYMPTOMS = [
+    "fever","cough","chest pain","headache","fatigue","shortness of breath",
+    "nausea","vomiting","rash","sore throat","diarrhea","joint pain","dizziness",
+    "back pain","muscle pain","loss of appetite","palpitations"
+]
+
+DIAGNOSES = [
+    "Flu","Heart Attack","Migraine","Cold","Pneumonia","Allergy",
+    "COVID-19","Gastroenteritis","Hypertension","Diabetes"
+]
+
+# ----------------- GENERATE RULES -----------------
+rules = [["id","conditions","diagnosis","confidence"]]
+for i in range(1, NUM_RULES+1):
+    conditions = ",".join(random.sample(SYMPTOMS, random.randint(1,4)))
+    diagnosis = random.choice(DIAGNOSES)
+    confidence = round(random.uniform(0.5, 1),2)
+    rules.append([f"R{i}", conditions, diagnosis, confidence])
+
+with open("rules_dataset.csv","w",newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows(rules)
+
+# ----------------- GENERATE CASES -----------------
+cases = [["id","symptoms","diagnosis"]]
+for i in range(1, NUM_CASES+1):
+    symptoms = ",".join(random.sample(SYMPTOMS, random.randint(2,6)))
+    diagnosis = random.choice(DIAGNOSES)
+    cases.append([i, symptoms, diagnosis])
+
+with open("cases_dataset.csv","w",newline="") as f:
+    writer = csv.writer(f)
+    writer.writerows(cases)
+
+# ----------------- DOWNLOAD FILES -----------------
+files.download("rules_dataset.csv")
+files.download("cases_dataset.csv")
+
+print("[INFO] Generated and ready to download rules_dataset.csv and cases_dataset.csv")
+
+
+
+
+
+import csv
+
+# ---------------------------------------------------------
+#     LOAD RULES FROM CSV DATABASE
+# ---------------------------------------------------------
+def load_rules(filename="rules_dataset.csv"):
+    rules = []
+    try:
+        with open(filename, newline="", encoding="utf-8") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                rule = {
+                    "id": row["id"],
+                    "if": row["conditions"].lower().replace(" ", "").split(","),
+                    "then": row["diagnosis"],
+                    "confidence": float(row["confidence"])
+                }
+                rules.append(rule)
+        print(f"[INFO] Loaded {len(rules)} rules from rule database.")
+    except Exception as e:
+        print("Error loading rules:", e)
+    return rules
+
+
+# ---------------------------------------------------------
+#     LOAD CASES FROM CSV DATABASE
+# ---------------------------------------------------------
+def load_cases(filename="cases_dataset.csv"):
+    cases = []
+    try:
+        with open(filename, newline="", encoding="utf-8") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                case = {
+                    "id": int(row["id"]),
+                    "symptoms": row["symptoms"].lower().replace(" ", "").split(","),
+                    "diagnosis": row["diagnosis"]
+                }
+                cases.append(case)
+        print(f"[INFO] Loaded {len(cases)} cases from case database.")
+    except Exception as e:
+        print("Error loading cases:", e)
+    return cases
+
+
+# ---------------------------------------------------------
+#     RULE-BASED DIAGNOSIS (PARTIAL MATCH)
+# ---------------------------------------------------------
+def rule_based_diagnosis(symptoms, rules, threshold=0.5):
+    results = []
+
+    for rule in rules:
+        total_conditions = len(rule["if"])
+        if total_conditions == 0:
+            continue
+        match_count = sum(cond in symptoms for cond in rule["if"])
+        match_fraction = match_count / total_conditions
+
+        if match_fraction >= threshold:
+            # Adjust confidence based on partial match
+            adjusted_confidence = round(rule["confidence"] * match_fraction, 2)
+            results.append({
+                "diagnosis": rule["then"],
+                "confidence": adjusted_confidence,
+                "source": f"Rule {rule['id']}"
+            })
+    return results
+
+
+# ---------------------------------------------------------
+#     CASE-BASED REASONING
+# ---------------------------------------------------------
+def similarity(sym1, sym2):
+    common = len(set(sym1) & set(sym2))
+    total = len(set(sym1) | set(sym2))
+    return common / total if total > 0 else 0
+
+
+def case_based_diagnosis(symptoms, cases):
+    best_case = None
+    best_score = 0
+
+    for case in cases:
+        score = similarity(symptoms, case["symptoms"])
+        if score > best_score:
+            best_score = score
+            best_case = case
+
+    if best_case:
+        return [{
+            "diagnosis": best_case["diagnosis"],
+            "confidence": round(best_score, 2),
+            "source": f"Case ID {best_case['id']}"
+        }]
+    return []
+
+
+# ---------------------------------------------------------
+#     HYBRID FUSION (Combining RBR + CBR)
+# ---------------------------------------------------------
+def fuse_results(rbr, cbr):
+    combined = {}
+
+    for result in rbr + cbr:
+        diag = result["diagnosis"]
+
+        if diag not in combined:
+            combined[diag] = {
+                "diagnosis": diag,
+                "confidence": result["confidence"],
+                "sources": [result["source"]]
+            }
+        else:
+            combined[diag]["confidence"] = max(
+                combined[diag]["confidence"],
+                result["confidence"]
+            )
+            combined[diag]["sources"].append(result["source"])
+
+    # Sort by confidence descending
+    combined_list = sorted(combined.values(), key=lambda x: x["confidence"], reverse=True)
+    return combined_list
+
+
+# ---------------------------------------------------------
+#     MAIN PROGRAM
+# ---------------------------------------------------------
+def main():
+    print("=== AI MEDICAL DIAGNOSIS ASSISTANT (Hybrid RBR + CBR) ===")
+
+    # Load rules and cases
+    rules = load_rules()
+    cases = load_cases()
+
+    if not rules:
+        print("Rule database is empty. Cannot continue.")
+        return
+    if not cases:
+        print("Case database is empty. Cannot continue.")
+        return
+
+    print("\nEnter symptoms separated by commas:")
+    symptoms = input("> ").lower().replace(" ", "").split(",")
+
+    # Engines
+    rbr_output = rule_based_diagnosis(symptoms, rules, threshold=0.5)
+    cbr_output = case_based_diagnosis(symptoms, cases)
+
+    final_output = fuse_results(rbr_output, cbr_output)
+
+    print("\n---------------- DIAGNOSIS RESULTS ----------------")
+    if not final_output:
+        print("No diagnosis found in rules or previous cases.")
+    else:
+        for res in final_output:
+            print(f"Diagnosis: {res['diagnosis']}")
+            print(f"Confidence: {res['confidence']}")
+            print(f"Sources Used: {', '.join(res['sources'])}")
+            print("---------------------------------------------------")
+
+
+# Run program
+if __name__ == "__main__":
+    main()
