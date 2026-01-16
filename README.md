@@ -1,0 +1,2 @@
+# AI-Based-Medical-Diagnosis-Assistant-Using-Hybrid-Rule-Based-And-Case-Based-Reasoning
+This project proposes an AI-based hybrid medical diagnosis assistant combining Rule-Based Reasoning, Case-Based Reasoning, and Naïve Bayes inference. By analyzing symptoms, expert rules, and past cases, it improves diagnostic accuracy, explainability, and reliability, supporting doctors in timely and effective clinical decision-making.
